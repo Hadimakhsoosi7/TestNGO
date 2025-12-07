@@ -1,10 +1,12 @@
 using Unity.Netcode;
 using UnityEngine;
-using Random = UnityEngine.Random;
+using Terresquall; // برای دسترسی به کلاس VirtualJoystick
+using static UnityEngine.InputSystem.InputSystem;
 
 public class PlayerMovement : NetworkBehaviour
 {
-    [SerializeField] private float moveSpeed = 2f; // مقدار پیش فرض را کمی کاهش دادم
+    // سرعت حرکت را کمی کاهش دادم
+    [SerializeField] private float moveSpeed = 2f; 
     private CharacterController characterController;
 
     // متغیرهای موقتی برای نگهداری ورودی در هر فریم
@@ -22,7 +24,6 @@ public class PlayerMovement : NetworkBehaviour
         // تنها کلاینت مالک (Owner) می‌تواند ورودی را پردازش کند.
         if (!IsOwner)
         {
-            // اسکریپت برای غیر مالکان غیرفعال می شود.
             enabled = false; 
             return;
         }
@@ -31,11 +32,21 @@ public class PlayerMovement : NetworkBehaviour
     // Update برای گرفتن ورودی‌های لحظه‌ای (مثل زدن کلید) و غیر فیزیکی
     void Update()
     {
-        // --- مدیریت ورودی ---
-        // ورودی‌ها را در اینجا می‌گیریم و ذخیره می‌کنیم
-        horizontalInput = Input.GetAxis("Horizontal"); // A, D
-        verticalInput = Input.GetAxis("Vertical");     // W, S
+        // --- گرفتن ورودی کیبورد و جوی استیک ---
 
+        // ورودی کیبورد
+        float keyboardH = Input.GetAxis("Horizontal"); // A, D
+        float keyboardV = Input.GetAxis("Vertical");     // W, S
+        
+        // ورودی جوی استیک (ID پیش فرض 0 فرض شده است)
+        float joystickH = VirtualJoystick.GetAxis("Horizontal", 0); 
+        float joystickV = VirtualJoystick.GetAxis("Vertical", 0);
+        
+        // ادغام ورودی‌ها: بزرگترین مقدار (مطلق) از کیبورد یا جوی استیک استفاده می‌شود
+        // این تضمین می‌کند که اگر کاربر یکی از آن‌ها را استفاده کند، حرکت اعمال شود.
+        horizontalInput = Mathf.Abs(keyboardH) > Mathf.Abs(joystickH) ? keyboardH : joystickH;
+        verticalInput = Mathf.Abs(keyboardV) > Mathf.Abs(joystickV) ? keyboardV : joystickV;
+        
         // --- مدیریت RPC برای رنگ ---
         if (Input.GetKeyDown(KeyCode.E))
         {
@@ -46,37 +57,28 @@ public class PlayerMovement : NetworkBehaviour
     // FixedUpdate برای اجرای منطق فیزیکی و ارسال درخواست‌های حرکتی به سرور
     void FixedUpdate()
     {
-        // در OnNetworkSpawn، اسکریپت برای غیر مالکان غیرفعال شده است، پس نیازی به چک کردن IsOwner نیست.
-
+        // در FixedUpdate، ورودی‌های ذخیره شده را برای حرکت استفاده می‌کنیم.
         Vector3 moveDirection = new Vector3(horizontalInput, 0f, verticalInput).normalized;
         
         if (moveDirection.magnitude > 0)
         {
-            // درخواست حرکت فقط در FixedUpdate ارسال می شود
             RequestMovementServerRpc(moveDirection);
         }
-        // اگر بخواهید گرانش یا اصطکاک را روی CharacterController اعمال کنید، می‌توانید آن را در اینجا مدیریت کنید.
     }
 
     // ServerRpc برای انتقال ورودی کلاینت به سرور
-    // این ServerRpc در FixedUpdate فریم کلاینت فراخوانی می‌شود، اما در FixedUpdate سرور اجرا می‌شود.
     [ServerRpc]
     public void RequestMovementServerRpc(Vector3 moveDirection)
     {
-        // این کد فقط روی سرور اختصاصی اجرا می شود
         if (!IsServer) return; 
 
-        // حرکت را روی سرور اعمال می کنیم 
         if (characterController != null)
         {
-            // از Time.fixedDeltaTime سرور استفاده می‌کنیم تا حرکت مستقل از فریم ریت کلاینت‌ها باشد
+            // از Time.fixedDeltaTime سرور استفاده می‌کنیم تا حرکت همگام باشد.
             characterController.Move(moveDirection * moveSpeed * Time.fixedDeltaTime);
         }
-        
-        // نکته: NetworkTransform (با Authority = Server) به طور خودکار این تغییر موقعیت را به همه کلاینت ها مخابره می کند.
     }
     
-    // ServerRpc برای درخواست تغییر رنگ
     [ServerRpc]
     public void ChangeColorServerRpc()
     {
@@ -88,15 +90,12 @@ public class PlayerMovement : NetworkBehaviour
             Random.Range(0f, 1f)
         );
 
-        // ClientRpc برای ارسال رنگ تولید شده به تمام کلاینت ها
         ChangeColorClientRpc(newColor);
     }
 
-    // ClientRpc برای دریافت دستور تغییر رنگ از سرور
     [ClientRpc]
     public void ChangeColorClientRpc(Color newColor)
     {
-        // این کد روی همه کلاینت ها اجرا می شود
         GetComponent<MeshRenderer>().material.color = newColor;
     }
 }

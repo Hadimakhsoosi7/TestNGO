@@ -29,5 +29,35 @@ public class PlayerMovement : NetworkBehaviour
         // محاسبه و اعمال حرکت
         Vector3 movement = new Vector3(horizontalInput, 0f, verticalInput) * moveSpeed * Time.deltaTime;
         transform.position += movement;
+
+        // چک کردن برای زدن کلید E
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            ChangeColorServerRpc();
+        }
     }
+
+    [ServerRpc]
+    public void ChangeColorServerRpc()
+    {
+        // رنگ تصادفی را فقط روی سرور تعیین می کنیم
+        Color newColor = new Color(
+            Random.Range(0f, 1f),
+            Random.Range(0f, 1f),
+            Random.Range(0f, 1f)
+        );
+
+        // سپس از یک ClientRpc برای ارسال این رنگ جدید به همه کلاینت ها استفاده می کنیم
+        ChangeColorClientRpc(newColor);
+    }
+
+    [ClientRpc]
+    public void ChangeColorClientRpc(Color newColor)
+    {
+        // تغییر رنگ مش (Mesh) پلیر
+        // فرض می کنیم که MeshRenderer روی همان آبجکت است
+        GetComponent<MeshRenderer>().material.color = newColor;
+    }
+
+
 }
